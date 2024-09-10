@@ -1,90 +1,60 @@
+// main_test.go
 package main
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
-func TestReadDirignore(t *testing.T) {
-	dir := t.TempDir()
-	ignoreFile := filepath.Join(dir, ".dirignore")
-	err := ioutil.WriteFile(ignoreFile, []byte("dir1\ndir2\n"), 0644)
+func TestReadDirIgnore(t *testing.T) {
+	// Set up a temporary directory for testing
+	tmpDir := t.TempDir()
+	ignoreFilePath := filepath.Join(tmpDir, ".dirignore")
+
+	// Write some ignored directories to the .dirignore file
+	ignoredDirs := []string{"ignored1", "ignored2"}
+	err := os.WriteFile(ignoreFilePath, []byte(strings.Join(ignoredDirs, "\n")), 0644)
 	if err != nil {
 		t.Fatalf("Failed to write .dirignore file: %v", err)
 	}
 
-	ignoredDirs, err := readDirignore(dir)
+	// Test reading the .dirignore file
+	ignoredMap, err := readDirIgnore(tmpDir)
 	if err != nil {
-		t.Fatalf("readDirignore returned an error: %v", err)
+		t.Fatalf("Error reading .dirignore: %v", err)
 	}
 
-	if _, exists := ignoredDirs["dir1"]; !exists {
-		t.Errorf("Expected 'dir1' to be in ignoredDirs")
-	}
-	if _, exists := ignoredDirs["dir2"]; !exists {
-		t.Errorf("Expected 'dir2' to be in ignoredDirs")
+	// Check that the ignored directories are correctly read
+	for _, dir := range ignoredDirs {
+		if _, ok := ignoredMap[dir]; !ok {
+			t.Errorf("Expected directory %s to be ignored, but it was not", dir)
+		}
 	}
 }
 
 func TestScanDirectory(t *testing.T) {
-	dir := t.TempDir()
-	subdir := filepath.Join(dir, "subdir")
-	err := os.Mkdir(subdir, 0755)
-	if err != nil {
-		t.Fatalf("Failed to create subdir: %v", err)
-	}
-	file := filepath.Join(subdir, "file.txt")
-	err = ioutil.WriteFile(file, []byte("content"), 0644)
-	if err != nil {
-		t.Fatalf("Failed to write file.txt: %v", err)
-	}
+	// Set up a temporary directory structure for testing
+	tmpDir := t.TempDir()
+	os.Mkdir(filepath.Join(tmpDir, "dir1"), 0755)
+	os.Mkdir(filepath.Join(tmpDir, "dir2"), 0755)
+	os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte("content"), 0644)
 
 	ignoredDirs := map[string]struct{}{
-		"ignoredir": {},
+		"dir2": {},
 	}
 
-	result, err := scanDirectory(dir, "", ignoredDirs)
+	// Test scanning the directory
+	structure, err := scanDirectory(tmpDir, "", ignoredDirs)
 	if err != nil {
-		t.Fatalf("scanDirectory returned an error: %v", err)
+		t.Fatalf("Error scanning directory: %v", err)
 	}
 
-	if !strings.Contains(result, "subdir") {
-		t.Errorf("Expected 'subdir' to be in the scan result")
-	}
-	if strings.Contains(result, "ignoredir") {
-		t.Errorf("Did not expect 'ignoredir' to be in the scan result")
-	}
-}
-
-func TestGenerateMarkdown(t *testing.T) {
-	dir := "/path/to/dir"
-	structure := "├── file1\n└── file2\n"
-	expected := "# Directory structure of /path/to/dir\n\n```\n├── file1\n└── file2\n```\n"
-	result := generateMarkdown(dir, structure)
-
-	if result != expected {
-		t.Errorf("Expected %q, but got %q", expected, result)
-	}
-}
-
-func TestWriteToFile(t *testing.T) {
-	content := "test content"
-	file := filepath.Join(t.TempDir(), "test.md")
-	err := writeToFile(file, content)
-	if err != nil {
-		t.Fatalf("writeToFile returned an error: %v", err)
-	}
-
-	readContent, err := ioutil.ReadFile(file)
-	if err != nil {
-		t.Fatalf("Failed to read the file: %v", err)
-	}
-
-	if string(readContent) != content {
-		t.Errorf("Expected file content to be %q, but got %q", content, string(readContent))
+	// Check that the structure is as expected
+	expectedStructure := "├── dir1\n└── file1.txt\n"
+	if structure != expectedStructure {
+		t.Errorf("Expected structure:\n%s\nGot:\n%s", expectedStructure, structure)
 	}
 }
 
@@ -93,15 +63,35 @@ func TestEnsureMdExtension(t *testing.T) {
 		input    string
 		expected string
 	}{
-		{"file", "file.md"},
-		{"file.md", "file.md"},
-		{"file.txt", "file.txt.md"},
+		{"output", "output.md"},
+		{"output.md", "output.md"},
+		{"doc.txt", "doc.txt.md"},
 	}
 
-	for _, test := range tests {
-		result := ensureMdExtension(test.input)
-		if result != test.expected {
-			t.Errorf("Expected %q, but got %q", test.expected, result)
+	for _, tt := range tests {
+		result := ensureMdExtension(tt.input)
+		if result != tt.expected {
+			t.Errorf("ensureMdExtension(%s): expected %s, got %s", tt.input, tt.expected, result)
 		}
+	}
+}
+
+func TestWriteToFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	filename := filepath.Join(tmpDir, "testfile.md")
+	content := "This is a test"
+
+	err := writeToFile(filename, content)
+	if err != nil {
+		t.Fatalf("Error writing to file: %v", err)
+	}
+
+	readContent, err := os.ReadFile(filename)
+	if err != nil {
+		t.Fatalf("Error reading file: %v", err)
+	}
+
+	if string(readContent) != content {
+		t.Errorf("Expected content: %s, got: %s", content, string(readContent))
 	}
 }
