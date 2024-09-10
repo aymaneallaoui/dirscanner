@@ -44,7 +44,7 @@ func scanDirectory(root string, prefix string, ignoredDirs map[string]struct{}, 
 		return "", fmt.Errorf("error reading directory %s: %v", root, err)
 	}
 
-	// Filter out excluded entries
+	
 	filteredEntries := []os.DirEntry{}
 	for _, entry := range entries {
 		if _, ok := ignoredDirs[entry.Name()]; ok {
@@ -52,7 +52,7 @@ func scanDirectory(root string, prefix string, ignoredDirs map[string]struct{}, 
 			continue
 		}
 
-		// Check if the file or directory should be excluded
+		
 		excluded := false
 		for _, pattern := range excludePatterns {
 			regexPattern, err := patternToRegex(pattern)
@@ -74,7 +74,7 @@ func scanDirectory(root string, prefix string, ignoredDirs map[string]struct{}, 
 		}
 	}
 
-	// Limit directory depth
+	
 	if maxDepth != -1 && currentDepth >= maxDepth {
 		return "", nil
 	}
