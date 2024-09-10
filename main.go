@@ -5,11 +5,99 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
+
+type ConnectorStyle struct {
+	Intermediate string
+	Last         string
+	Prefix       string
+	Branch       string
+}
+
+func patternToRegex(pattern string) (string, error) {
+
+	regexPattern := regexp.QuoteMeta(pattern)
+
+	regexPattern = strings.ReplaceAll(regexPattern, `\*`, ".*")
+	regexPattern = strings.ReplaceAll(regexPattern, `\?`, ".")
+
+	regexPattern = "^" + regexPattern + "$"
+
+	_, err := regexp.Compile(regexPattern)
+	if err != nil {
+		return "", fmt.Errorf("error compiling regex pattern: %v", err)
+	}
+
+	return regexPattern, nil
+}
+
+func scanDirectory(root string, prefix string, ignoredDirs map[string]struct{}, style ConnectorStyle, excludePatterns []string, maxDepth, currentDepth int) (string, error) {
+	logrus.Infof("Scanning directory: %s with prefix: %s", root, prefix)
+	var result strings.Builder
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return "", fmt.Errorf("error reading directory %s: %v", root, err)
+	}
+
+	// Filter out excluded entries
+	filteredEntries := []os.DirEntry{}
+	for _, entry := range entries {
+		if _, ok := ignoredDirs[entry.Name()]; ok {
+			logrus.Infof("Skipping ignored directory: %s", entry.Name())
+			continue
+		}
+
+		// Check if the file or directory should be excluded
+		excluded := false
+		for _, pattern := range excludePatterns {
+			regexPattern, err := patternToRegex(pattern)
+			if err != nil {
+				return "", fmt.Errorf("error matching pattern %s: %v", pattern, err)
+			}
+			matched, err := regexp.MatchString(regexPattern, entry.Name())
+			if err != nil {
+				return "", fmt.Errorf("error matching pattern %s: %v", regexPattern, err)
+			}
+			if matched {
+				logrus.Infof("Skipping excluded file/directory: %s", entry.Name())
+				excluded = true
+				break
+			}
+		}
+		if !excluded {
+			filteredEntries = append(filteredEntries, entry)
+		}
+	}
+
+	// Limit directory depth
+	if maxDepth != -1 && currentDepth >= maxDepth {
+		return "", nil
+	}
+
+	for i, entry := range filteredEntries {
+		connector := style.Intermediate
+		newPrefix := prefix + style.Branch
+		if i == len(filteredEntries)-1 {
+			connector = style.Last
+			newPrefix = prefix + style.Prefix
+		}
+		result.WriteString(fmt.Sprintf("%s%s%s\n", prefix, connector, entry.Name()))
+
+		if entry.IsDir() {
+			subDir, err := scanDirectory(filepath.Join(root, entry.Name()), newPrefix, ignoredDirs, style, excludePatterns, maxDepth, currentDepth+1)
+			if err != nil {
+				return "", err
+			}
+			result.WriteString(subDir)
+		}
+	}
+	return result.String(), nil
+}
 
 func readDirIgnore(root string) (map[string]struct{}, error) {
 	ignoredDirs := make(map[string]struct{})
@@ -37,39 +125,6 @@ func readDirIgnore(root string) (map[string]struct{}, error) {
 	}
 
 	return ignoredDirs, nil
-}
-
-func scanDirectory(root string, prefix string, ignoredDirs map[string]struct{}) (string, error) {
-	//logrus.Infof("Scanning directory: %s with prefix: %s", root, prefix)
-	var result strings.Builder
-	entries, err := os.ReadDir(root)
-	if err != nil {
-		return "", fmt.Errorf("error reading directory %s: %v", root, err)
-	}
-
-	for i, entry := range entries {
-		if _, ok := ignoredDirs[entry.Name()]; ok {
-			logrus.Infof("Skipping ignored directory: %s", entry.Name())
-			continue
-		}
-
-		connector := "├── "
-		newPrefix := prefix + "│   "
-		if i == len(entries)-1 {
-			connector = "└── "
-			newPrefix = prefix + "    "
-		}
-		result.WriteString(fmt.Sprintf("%s%s%s\n", prefix, connector, entry.Name()))
-
-		if entry.IsDir() {
-			subDir, err := scanDirectory(filepath.Join(root, entry.Name()), newPrefix, ignoredDirs)
-			if err != nil {
-				return "", err
-			}
-			result.WriteString(subDir)
-		}
-	}
-	return result.String(), nil
 }
 
 func generateMarkdown(dir string, structure string) string {
@@ -100,6 +155,15 @@ func ensureMdExtension(filename string) string {
 }
 
 func main() {
+	var (
+		intermediate string
+		last         string
+		prefix       string
+		branch       string
+		exclude      []string
+		maxDepth     int
+	)
+
 	var rootCmd = &cobra.Command{
 		Use:   "dirscanner",
 		Short: "A CLI tool to scan directories and generate a Markdown file with the structure",
@@ -116,7 +180,14 @@ func main() {
 				return fmt.Errorf("error reading .dirignore file: %v", err)
 			}
 
-			structure, err := scanDirectory(dir, "", ignoredDirs)
+			style := ConnectorStyle{
+				Intermediate: intermediate,
+				Last:         last,
+				Prefix:       prefix,
+				Branch:       branch,
+			}
+
+			structure, err := scanDirectory(dir, "", ignoredDirs, style, exclude, maxDepth, 0)
 			if err != nil {
 				return fmt.Errorf("error scanning directory: %v", err)
 			}
@@ -131,6 +202,13 @@ func main() {
 			return nil
 		},
 	}
+
+	rootCmd.Flags().StringVar(&intermediate, "intermediate", "├── ", "Symbol for intermediate nodes")
+	rootCmd.Flags().StringVar(&last, "last", "└── ", "Symbol for the last node in a directory")
+	rootCmd.Flags().StringVar(&prefix, "prefix", "    ", "Prefix for child nodes")
+	rootCmd.Flags().StringVar(&branch, "branch", "│   ", "Branch for intermediate nodes")
+	rootCmd.Flags().StringSliceVar(&exclude, "exclude", []string{}, "Exclude files or directories matching these patterns (e.g., '*.txt')")
+	rootCmd.Flags().IntVar(&maxDepth, "depth", -1, "Limit the depth of the directory traversal (-1 for no limit)")
 
 	if err := rootCmd.Execute(); err != nil {
 		logrus.Fatal(err)

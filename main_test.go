@@ -1,4 +1,3 @@
-// main_test.go
 package main
 
 import (
@@ -9,24 +8,20 @@ import (
 )
 
 func TestReadDirIgnore(t *testing.T) {
-	// Set up a temporary directory for testing
 	tmpDir := t.TempDir()
 	ignoreFilePath := filepath.Join(tmpDir, ".dirignore")
 
-	// Write some ignored directories to the .dirignore file
 	ignoredDirs := []string{"ignored1", "ignored2"}
 	err := os.WriteFile(ignoreFilePath, []byte(strings.Join(ignoredDirs, "\n")), 0644)
 	if err != nil {
 		t.Fatalf("Failed to write .dirignore file: %v", err)
 	}
 
-	// Test reading the .dirignore file
 	ignoredMap, err := readDirIgnore(tmpDir)
 	if err != nil {
 		t.Fatalf("Error reading .dirignore: %v", err)
 	}
 
-	// Check that the ignored directories are correctly read
 	for _, dir := range ignoredDirs {
 		if _, ok := ignoredMap[dir]; !ok {
 			t.Errorf("Expected directory %s to be ignored, but it was not", dir)
@@ -35,7 +30,6 @@ func TestReadDirIgnore(t *testing.T) {
 }
 
 func TestScanDirectory(t *testing.T) {
-	// Set up a temporary directory structure for testing
 	tmpDir := t.TempDir()
 	os.Mkdir(filepath.Join(tmpDir, "dir1"), 0755)
 	os.Mkdir(filepath.Join(tmpDir, "dir2"), 0755)
@@ -45,13 +39,70 @@ func TestScanDirectory(t *testing.T) {
 		"dir2": {},
 	}
 
-	// Test scanning the directory
-	structure, err := scanDirectory(tmpDir, "", ignoredDirs)
+	style := ConnectorStyle{
+		Intermediate: "├── ",
+		Last:         "└── ",
+		Prefix:       "    ",
+		Branch:       "│   ",
+	}
+
+	structure, err := scanDirectory(tmpDir, "", ignoredDirs, style, []string{}, -1, 0)
 	if err != nil {
 		t.Fatalf("Error scanning directory: %v", err)
 	}
 
-	// Check that the structure is as expected
+	expectedStructure := "├── dir1\n└── file1.txt\n"
+	if structure != expectedStructure {
+		t.Errorf("Expected structure:\n%s\nGot:\n%s", expectedStructure, structure)
+	}
+}
+
+func TestScanDirectoryWithExclusions(t *testing.T) {
+	tmpDir := t.TempDir()
+	os.Mkdir(filepath.Join(tmpDir, "dir1"), 0755)
+	os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte("content"), 0644)
+	os.WriteFile(filepath.Join(tmpDir, "file2.log"), []byte("content"), 0644)
+
+	ignoredDirs := map[string]struct{}{}
+	style := ConnectorStyle{
+		Intermediate: "├── ",
+		Last:         "└── ",
+		Prefix:       "    ",
+		Branch:       "│   ",
+	}
+
+	excludePatterns := []string{"*.log"}
+	structure, err := scanDirectory(tmpDir, "", ignoredDirs, style, excludePatterns, -1, 0)
+	if err != nil {
+		t.Fatalf("Error scanning directory: %v", err)
+	}
+
+	expectedStructure := "├── dir1\n└── file1.txt\n"
+	if structure != expectedStructure {
+		t.Errorf("Expected structure:\n%s\nGot:\n%s", expectedStructure, structure)
+	}
+}
+
+func TestScanDirectoryWithDepthLimit(t *testing.T) {
+	tmpDir := t.TempDir()
+	os.Mkdir(filepath.Join(tmpDir, "dir1"), 0755)
+	os.Mkdir(filepath.Join(tmpDir, "dir1", "subdir1"), 0755)
+	os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte("content"), 0644)
+	os.WriteFile(filepath.Join(tmpDir, "dir1", "subdir1", "file2.txt"), []byte("content"), 0644)
+
+	ignoredDirs := map[string]struct{}{}
+	style := ConnectorStyle{
+		Intermediate: "├── ",
+		Last:         "└── ",
+		Prefix:       "    ",
+		Branch:       "│   ",
+	}
+
+	structure, err := scanDirectory(tmpDir, "", ignoredDirs, style, []string{}, 1, 0)
+	if err != nil {
+		t.Fatalf("Error scanning directory: %v", err)
+	}
+
 	expectedStructure := "├── dir1\n└── file1.txt\n"
 	if structure != expectedStructure {
 		t.Errorf("Expected structure:\n%s\nGot:\n%s", expectedStructure, structure)

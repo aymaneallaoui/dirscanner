@@ -1,40 +1,61 @@
-# DIRSCANNER:
+# DirScanner
 
-ADD IMAGE HERE
+DirScanner is a CLI tool written in Go that scans a directory and generates a Markdown file with the directory's structure. It supports custom connector styles, exclusion of certain file types, and limiting directory traversal depth.
 
-## Description:
+## Features
 
-many times i need to share our file structure so I made this cli tool to make it easier in golang to scan provided directory and make a markdown file of the file structure of the whole directory.
+- **Generate Directory Structure**: Easily generate a Markdown file representing the structure of a directory.
+- **Custom Connector Styles**: Customize the symbols used to represent the directory tree.
+- **Exclude File Types**: Exclude specific file types or directories based on patterns.
+- **Limit Directory Depth**: Restrict how deep the tool scans the directory tree.
 
-## Usage:
+## Installation
 
-```
-dirscanner -dir=<your target dir> -output=<output-file.md>
-```
+You can install DirScanner directly using:
 
-### example of the output:
-
-```
-├── go.mod
-├── main.go
-├── main_test.go
-├── structure
-└── testdir
-    ├── dir1
-    │   ├── file1.txt
-    │   └── subdir1
-    │       └── subdir2
-    │           ├── file.txt
-    │           └── lol
-    └── file2.txt
+```sh
+go install github.com/aymaneallaoui/dirscanner@latest
 ```
 
-## Installation:
+## Usage
+
+### Basic Usage
+
+To scan a directory and generate a Markdown file:
+
+```sh
+dirscanner <directory to scan> <output markdown file>
+```
+
+### Exclude File Types or Directories
+
+You can exclude specific file types or directories using the --exclude flag or using the `.dirignore` file.
+
+```sh
+dirscanner ./dir structure.md --exclude ".txt" --exclude "node_modules"
 
 ```
- go get github.com/aymaneallaoui/dirscanner
+
+### Limit Directory Depth
+
+To limit how deep the tool scans the directory, use the `--depth` flag:
+
+```sh
+dirscanner ./dir structure.md --depth 2
 ```
 
-## License:
+### Customize Connector Styles
 
-MIT
+You can customize the symbols used to draw the directory tree:
+
+```sh
+dirscanner ./dir structure.md --intermediate "+-- " --last "`-- " --prefix "    " --branch "|   "
+```
+
+## Contributing
+
+Contributions are welcome! Please submit a pull request or open an issue to discuss any changes or improvements.
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
